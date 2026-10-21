@@ -39,10 +39,10 @@ import java.time.LocalDate
 private data class Tab(val route: String, val label: String, val icon: ImageVector)
 
 private val tabs = listOf(
-    Tab("calendar", "Calendar", Icons.Default.CalendarMonth),
-    Tab("recipes", "Recipes", Icons.AutoMirrored.Filled.MenuBook),
+    Tab("calendar", "Calendrier", Icons.Default.CalendarMonth),
+    Tab("recipes", "Recettes", Icons.AutoMirrored.Filled.MenuBook),
     Tab("stats", "Stats", Icons.Default.BarChart),
-    Tab("suggest", "Suggest", Icons.Default.AutoAwesome),
+    Tab("suggest", "Idées", Icons.Default.AutoAwesome),
 )
 
 @Composable

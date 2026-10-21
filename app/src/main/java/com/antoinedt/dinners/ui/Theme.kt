@@ -43,3 +43,9 @@ fun seriesColors(): List<Color> = if (isSystemInDarkTheme()) {
 }
 
 val OtherSeriesColor = Color(0xFF9A9A96)
+
+/** Dates are always shown in French, whatever the phone language. */
+fun frDate(pattern: String): java.time.format.DateTimeFormatter =
+    java.time.format.DateTimeFormatter.ofPattern(pattern, java.util.Locale.FRENCH)
+
+fun String.capitalized(): String = replaceFirstChar { it.titlecase(java.util.Locale.FRENCH) }

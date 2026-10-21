@@ -1,5 +1,12 @@
 package com.antoinedt.dinners.ui.stats
 
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Label
+import androidx.compose.material3.Icon
+import com.antoinedt.dinners.data.allLabels
+import com.antoinedt.dinners.ui.capitalized
+import com.antoinedt.dinners.ui.frDate
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -57,50 +64,73 @@ import java.util.Locale
 import kotlin.math.roundToInt
 
 private enum class Period(val label: String, val days: Long?, val months: Int) {
-    Month("30 days", 30, 6), Quarter("3 months", 91, 6), Year("Year", 365, 12), All("All time", null, 12)
+    Month("30 jours", 30, 6), Quarter("3 mois", 91, 6), Year("1 an", 365, 12), All("Tout", null, 12)
 }
 
 @OptIn(ExperimentalMaterial3Api::class, androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 fun StatsScreen(vm: DinnersViewModel) {
-    val dinners by vm.dinners.collectAsStateWithLifecycle()
+    val allDinners by vm.dinners.collectAsStateWithLifecycle()
+    val recipes by vm.recipes.collectAsStateWithLifecycle()
     var period by rememberSaveable { mutableStateOf(Period.Quarter) }
+    var labelFilter by rememberSaveable { mutableStateOf<String?>(null) }
+    val labels = allLabels(recipes)
+    val activeLabel = labelFilter?.takeIf { it in labels }
+    val dinners = if (activeLabel == null) allDinners else {
+        val ids = recipes.filter { r -> r.labelList.any { it.equals(activeLabel, ignoreCase = true) } }.map { it.id }.toSet()
+        allDinners.filter { it.recipeId in ids }
+    }
     val today = LocalDate.now()
-    val stats = Insights.stats(dinners, period.days?.let { today.minusDays(it - 1) }, today, period.months)
+    val from = period.days?.let { today.minusDays(it - 1) }
+    val stats = Insights.stats(dinners, from, today, period.months)
 
     Column(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Period.entries.forEach {
                 FilterChip(selected = period == it, onClick = { period = it }, label = { Text(it.label) })
             }
         }
 
+        if (labels.isNotEmpty()) {
+            Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FilterChip(selected = activeLabel == null, onClick = { labelFilter = null }, label = { Text("Toutes étiquettes") })
+                labels.forEach { label ->
+                    FilterChip(
+                        selected = activeLabel == label,
+                        onClick = { labelFilter = if (activeLabel == label) null else label },
+                        leadingIcon = { Icon(Icons.AutoMirrored.Filled.Label, null, Modifier.size(16.dp)) },
+                        label = { Text(label) },
+                    )
+                }
+            }
+        }
+
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            StatTile("Dinners", stats.totalDinners.toString(), Modifier.weight(1f))
-            StatTile("Recipes", stats.distinctRecipes.toString(), Modifier.weight(1f))
+            StatTile("Repas", stats.totalDinners.toString(), Modifier.weight(1f))
+            StatTile("Recettes", stats.distinctRecipes.toString(), Modifier.weight(1f))
             StatTile(
-                "Days logged",
+                "Jours notés",
                 "${(stats.daysLogged * 100.0 / stats.daysInPeriod).roundToInt()}%",
                 Modifier.weight(1f),
             )
         }
 
         if (stats.totalDinners == 0) {
-            Text("No dinners logged in this period yet.", style = MaterialTheme.typography.bodyLarge)
+            Text(if (activeLabel == null) "Aucun repas noté sur cette période." else "Aucun repas « $activeLabel » sur cette période.", style = MaterialTheme.typography.bodyLarge)
         }
 
         if (stats.shares.isNotEmpty()) {
-            Section("Share of dinners") {
+            Section(if (activeLabel == null) "Part de chaque recette" else "Part de chaque recette · $activeLabel") {
                 val max = stats.shares.first().count.toFloat()
                 stats.shares.forEach { share ->
                     Column(Modifier.padding(vertical = 4.dp)) {
                         Row {
                             Text(share.name, Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
                             Text(
-                                "${share.count}× · ${"%.0f".format(share.pct)}%",
+                                "${share.count}× · ${"%.0f".format(Locale.FRENCH, share.pct)} %",
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
@@ -115,15 +145,44 @@ fun StatsScreen(vm: DinnersViewModel) {
             }
         }
 
-        Section("Monthly trend") {
+        if (activeLabel == null && labels.isNotEmpty() && stats.totalDinners > 0) {
+            Section("Part de chaque étiquette") {
+                val shares = Insights.labelShares(dinners, recipes, from, today)
+                val max = shares.maxOf { it.count }.toFloat()
+                shares.forEach { share ->
+                    Column(Modifier.padding(vertical = 4.dp)) {
+                        Row {
+                            Text(share.label, Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            Text(
+                                "${share.count}× · ${"%.0f".format(Locale.FRENCH, share.pct)} %",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        Box(
+                            Modifier.fillMaxWidth(share.count / max).height(8.dp)
+                                .clip(RoundedCornerShape(4.dp))
+                                .background(if (share.label == Insights.NO_LABEL) OtherSeriesColor else seriesColors()[1]),
+                        )
+                    }
+                }
+                Text(
+                    "Un repas compte pour chaque étiquette de sa recette : le total peut dépasser 100 %.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+
+        Section("Évolution mensuelle") {
             TrendChart(stats.months, dinners.associate { it.recipeId to it.recipeName })
         }
 
         if (stats.byWeekday.isNotEmpty()) {
-            Section("Favourite by weekday") {
+            Section("Le plat préféré de chaque jour") {
                 DayOfWeek.entries.forEach { day ->
                     Row(Modifier.padding(vertical = 2.dp)) {
-                        Text(day.getDisplayName(TextStyle.FULL, Locale.getDefault()), Modifier.width(110.dp))
+                        Text(day.getDisplayName(TextStyle.FULL, Locale.FRENCH).capitalized(), Modifier.width(110.dp))
                         val fav = stats.byWeekday[day]
                         Text(
                             fav?.let { "${it.first} (${it.second}×)" } ?: "—",
@@ -174,7 +233,7 @@ private fun TrendChart(months: List<MonthBucket>, names: Map<Long, String>) {
     val grid = MaterialTheme.colorScheme.outlineVariant
 
     if (totals.isEmpty()) {
-        Text("Log some dinners to see trends.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text("Notez quelques repas pour voir les tendances.", color = MaterialTheme.colorScheme.onSurfaceVariant)
         return
     }
 
@@ -207,7 +266,7 @@ private fun TrendChart(months: List<MonthBucket>, names: Map<Long, String>) {
     Row(Modifier.fillMaxWidth()) {
         months.forEach {
             Text(
-                it.month.format(DateTimeFormatter.ofPattern("MMM")),
+                it.month.format(frDate("MMM")),
                 style = MaterialTheme.typography.labelSmall,
                 textAlign = TextAlign.Center,
                 modifier = Modifier.weight(1f),
@@ -217,12 +276,12 @@ private fun TrendChart(months: List<MonthBucket>, names: Map<Long, String>) {
     Spacer(Modifier.height(8.dp))
     FlowRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
         top.forEach { LegendItem(colorOf.getValue(it), names[it] ?: "?") }
-        if (totals.size > top.size) LegendItem(OtherSeriesColor, "Other")
+        if (totals.size > top.size) LegendItem(OtherSeriesColor, "Autres")
     }
     months.getOrNull(selected)?.let { m ->
         Spacer(Modifier.height(8.dp))
         Text(
-            m.month.format(DateTimeFormatter.ofPattern("MMMM yyyy")) + " · ${m.total} dinners",
+            m.month.format(frDate("MMMM yyyy")).capitalized() + " · ${m.total} repas",
             style = MaterialTheme.typography.titleSmall,
         )
         m.counts.entries.sortedByDescending { it.value }.forEach { (id, n) ->

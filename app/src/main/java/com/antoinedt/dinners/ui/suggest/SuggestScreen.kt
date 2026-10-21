@@ -1,5 +1,6 @@
 package com.antoinedt.dinners.ui.suggest
 
+import com.antoinedt.dinners.ui.frDate
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -56,30 +57,30 @@ fun SuggestScreen(vm: DinnersViewModel) {
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Text("What's for dinner?", style = MaterialTheme.typography.headlineSmall)
+        Text("On mange quoi ?", style = MaterialTheme.typography.headlineSmall)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-            FilterChip(selected = !tomorrow, onClick = { tomorrow = false }, label = { Text("Tonight") })
-            FilterChip(selected = tomorrow, onClick = { tomorrow = true }, label = { Text("Tomorrow") })
+            FilterChip(selected = !tomorrow, onClick = { tomorrow = false }, label = { Text("Ce soir") })
+            FilterChip(selected = tomorrow, onClick = { tomorrow = true }, label = { Text("Demain") })
             OutlinedButton(onClick = { shuffle++ }) {
                 Icon(Icons.Default.Shuffle, null)
-                Text(" Shuffle")
+                Text(" Mélanger")
             }
         }
         Text(
-            "Based on what you eat often, what's due again, what you had recently and your " +
-                day.format(DateTimeFormatter.ofPattern("EEEE")) + " habits.",
+            "D'après vos plats préférés, ceux qu'il est temps de refaire, ce que vous avez mangé récemment " +
+                "et vos habitudes du " + day.format(frDate("EEEE")) + ".",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         if (planned.isNotEmpty()) {
             Text(
-                "Already planned: " + planned.joinToString { it.recipeName },
+                "Déjà prévu : " + planned.joinToString { it.recipeName },
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.primary,
             )
         }
         if (recipes.isEmpty()) {
-            Text("Add some recipes and log a few dinners to get suggestions.", style = MaterialTheme.typography.bodyLarge)
+            Text("Ajoutez des recettes et notez quelques repas pour recevoir des idées.", style = MaterialTheme.typography.bodyLarge)
         }
         suggestions.forEachIndexed { i, s ->
             Card(Modifier.fillMaxWidth()) {
@@ -90,7 +91,7 @@ fun SuggestScreen(vm: DinnersViewModel) {
                     }
                     Button(onClick = { vm.addDinner(day, s.recipe.id) }) {
                         Icon(Icons.Default.Check, null)
-                        Text(if (tomorrow) " Plan for tomorrow" else " Have it tonight")
+                        Text(if (tomorrow) " Prévoir pour demain" else " Ce soir !")
                     }
                 }
             }

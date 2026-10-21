@@ -3,6 +3,8 @@ package com.antoinedt.dinners.data
 import java.time.DayOfWeek
 import java.time.LocalDate
 import java.time.YearMonth
+import java.time.format.TextStyle
+import java.util.Locale
 import kotlin.math.ln
 import kotlin.math.min
 import kotlin.random.Random
@@ -23,6 +25,9 @@ data class Stats(
     /** Most frequent recipe for each weekday, with its count. */
     val byWeekday: Map<DayOfWeek, Pair<String, Int>>,
 )
+
+/** Share of dinners carrying each label (a dinner counts once for each label of its recipe). */
+data class LabelShare(val label: String, val count: Int, val pct: Double)
 
 data class Suggestion(val recipe: Recipe, val score: Double, val reasons: List<String>)
 
@@ -63,6 +68,25 @@ object Insights {
         )
     }
 
+    /** Label shares for dinners in [from]..[to]; [from] null means all-time. */
+    fun labelShares(dinners: List<DinnerEntry>, recipes: List<Recipe>, from: LocalDate?, to: LocalDate): List<LabelShare> {
+        val labelsById = recipes.associate { it.id to it.labelList }
+        val inRange = dinners.filter { (from == null || it.epochDay >= from.toEpochDay()) && it.epochDay <= to.toEpochDay() }
+        if (inRange.isEmpty()) return emptyList()
+        val counts = mutableMapOf<String, Int>()
+        var unlabelled = 0
+        inRange.forEach { d ->
+            val labels = labelsById[d.recipeId].orEmpty()
+            if (labels.isEmpty()) unlabelled++
+            labels.forEach { counts[it] = (counts[it] ?: 0) + 1 }
+        }
+        if (unlabelled > 0) counts[NO_LABEL] = unlabelled
+        return counts.map { (label, n) -> LabelShare(label, n, n * 100.0 / inRange.size) }
+            .sortedWith(compareByDescending<LabelShare> { it.count }.thenBy { it.label.lowercase() })
+    }
+
+    const val NO_LABEL = "Sans étiquette"
+
     /**
      * Ranks recipes for [day] from eating history:
      *  - favourites (eaten often) score higher,
@@ -90,21 +114,21 @@ object Insights {
 
             if (days.isEmpty()) {
                 score = 1.2
-                reasons += "Saved but never cooked — try something new"
+                reasons += "Enregistrée mais jamais cuisinée — à essayer !"
             } else {
                 val count = days.size
                 val daysSince = today - days.last()
                 score = ln(1.0 + count)
-                if (count >= 3) reasons += "A favourite: eaten $count times"
+                if (count >= 3) reasons += "Un classique : mangé $count fois"
 
                 val avgGap = if (count >= 2) (days.last() - days.first()).toDouble() / (count - 1) else 21.0
                 val due = min(daysSince / avgGap.coerceAtLeast(1.0), 3.0)
                 score += 1.5 * due
                 when {
                     due >= 1.0 && count >= 2 ->
-                        reasons += "Usually every ${avgGap.toInt()} days — last had $daysSince days ago"
-                    daysSince >= 30 -> reasons += "Not had for $daysSince days"
-                    else -> reasons += "Last had $daysSince days ago"
+                        reasons += "D'habitude tous les ${avgGap.toInt()} jours — dernière fois il y a $daysSince jours"
+                    daysSince >= 30 -> reasons += "Pas mangé depuis $daysSince jours"
+                    else -> reasons += "Dernière fois il y a $daysSince jours"
                 }
 
                 if (daysSince <= 2) score -= 5.0 else if (daysSince <= 6) score -= 2.0
@@ -114,7 +138,7 @@ object Insights {
                     val share = sameWeekday.toDouble() / count
                     score += 3.0 * (share - 1.0 / 7)
                     if (share >= 0.35) {
-                        reasons += "Often a ${day.dayOfWeek.name.lowercase().replaceFirstChar { it.uppercase() }} dinner"
+                        reasons += "Souvent mangé le ${day.dayOfWeek.getDisplayName(TextStyle.FULL, Locale.FRENCH)}"
                     }
                 }
             }

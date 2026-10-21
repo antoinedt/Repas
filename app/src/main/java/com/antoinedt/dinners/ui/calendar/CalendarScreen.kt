@@ -1,5 +1,7 @@
 package com.antoinedt.dinners.ui.calendar
 
+import com.antoinedt.dinners.ui.frDate
+import com.antoinedt.dinners.ui.capitalized
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -72,29 +74,29 @@ fun CalendarScreen(vm: DinnersViewModel) {
             verticalAlignment = Alignment.CenterVertically,
         ) {
             IconButton(onClick = { monthText = month.minusMonths(1).toString() }) {
-                Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, "Previous month")
+                Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, "Mois précédent")
             }
             Text(
-                month.format(DateTimeFormatter.ofPattern("MMMM yyyy")),
+                month.format(frDate("MMMM yyyy")).capitalized(),
                 style = MaterialTheme.typography.titleLarge,
                 textAlign = TextAlign.Center,
                 modifier = Modifier.weight(1f),
             )
             IconButton(onClick = { monthText = month.plusMonths(1).toString() }) {
-                Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, "Next month")
+                Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, "Mois suivant")
             }
         }
         if (month != YearMonth.from(today)) {
             TextButton(
                 onClick = { monthText = YearMonth.from(today).toString(); selectedDay = today.toEpochDay() },
                 modifier = Modifier.align(Alignment.CenterHorizontally),
-            ) { Text("Today") }
+            ) { Text("Aujourd'hui") }
         }
 
         Row(Modifier.padding(horizontal = 8.dp)) {
             DayOfWeek.entries.forEach {
                 Text(
-                    it.getDisplayName(TextStyle.SHORT, Locale.getDefault()),
+                    it.getDisplayName(TextStyle.SHORT, Locale.FRENCH).capitalized(),
                     style = MaterialTheme.typography.labelMedium,
                     textAlign = TextAlign.Center,
                     modifier = Modifier.weight(1f),
@@ -131,24 +133,24 @@ fun CalendarScreen(vm: DinnersViewModel) {
         Card(Modifier.fillMaxWidth().padding(12.dp)) {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(
-                    selected.format(DateTimeFormatter.ofPattern("EEEE d MMMM")),
+                    selected.format(frDate("EEEE d MMMM")).capitalized(),
                     style = MaterialTheme.typography.titleMedium,
                 )
                 val entries = byDay[selectedDay].orEmpty()
                 if (entries.isEmpty()) {
-                    Text("Nothing logged.", style = MaterialTheme.typography.bodyMedium)
+                    Text("Rien de noté.", style = MaterialTheme.typography.bodyMedium)
                 }
                 entries.forEach { entry ->
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(entry.recipeName, Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge)
                         IconButton(onClick = { vm.removeDinner(entry.dinnerId) }) {
-                            Icon(Icons.Default.Close, "Remove")
+                            Icon(Icons.Default.Close, "Retirer")
                         }
                     }
                 }
                 Button(onClick = { adding = true }) {
                     Icon(Icons.Default.Add, null)
-                    Text("Add dinner")
+                    Text("Ajouter un repas")
                 }
             }
         }

@@ -1,31 +1,52 @@
-# Dinners
+# Repas
 
-Android app to keep track of what we eat for dinner.
+Application Android pour noter ce qu'on mange le soir.
 
-- **Calendar** – month view; tap a day and pick what you ate from a searchable dropdown, or add a new recipe.
-  A new recipe can have a website: the page is downloaded and the recipe (ingredients, steps, photo, time)
-  is saved inside the app, so it stays available offline.
-- **Recipes** – every saved recipe, searchable and sortable (A–Z, most eaten, recent). Open one to read it,
-  edit it, open the original site or re-import it.
-- **Stats** – dinners logged, share (%) of each recipe, monthly trend of the top recipes, favourite by weekday.
-  Periods: 30 days, 3 months, year, all time.
-- **Suggest** – ranks recipes for tonight or tomorrow from your history: favourites, recipes that are "due"
-  again given how often you usually have them, what you ate recently (avoided), weekday habits, and saved
-  recipes you've never cooked. Shuffle for alternatives, one tap to plan it.
+- **Calendrier** – vue mensuelle ; touchez un jour et choisissez le plat dans une liste déroulante, ou ajoutez
+  une nouvelle recette. Une nouvelle recette peut avoir un site web : la page est téléchargée et la recette
+  (ingrédients, étapes, photo, durée) est enregistrée dans l'app, disponible hors ligne.
+- **Recettes** – toutes les recettes, avec recherche, tri (A–Z, les plus mangées, récentes) et filtre par
+  étiquette. Chaque recette peut recevoir des étiquettes (liste des étiquettes déjà utilisées, ou nouvelle).
+- **Stats** – nombre de repas, part (%) de chaque recette et de chaque étiquette, évolution mensuelle,
+  plat préféré par jour de la semaine. Périodes : 30 jours, 3 mois, 1 an, tout. Filtre par étiquette.
+- **Idées** – propose des recettes pour ce soir ou demain d'après l'historique : plats préférés, ceux qu'il est
+  temps de refaire, ce qui a été mangé récemment (évité), habitudes du jour, recettes jamais cuisinées.
 
-You can also share a recipe link from your browser to the app to save it.
+On peut aussi partager un lien de recette depuis le navigateur vers l'app.
 
-## Install
+## Sauvegarde
 
-Every push to `main` builds an APK with GitHub Actions and publishes it as a release.
-On your phone open the repo's **Releases**, download `app-release.apk`, and allow installing from your browser.
+Dans **Recettes → ⋮** :
 
-## Build locally
+- **Exporter la sauvegarde…** – enregistre un fichier `repas-sauvegarde-AAAA-MM-JJ.json` où vous voulez
+  (Téléchargements, Drive…).
+- **Partager la sauvegarde…** – envoie le fichier par e-mail, messagerie, etc.
+- **Importer une sauvegarde…** – fusionne un fichier dans les données actuelles : les recettes sont
+  reconnues par leur nom (étiquettes et détails manquants complétés), les repas déjà notés ne sont pas
+  dupliqués. Rien n'est effacé.
 
-Requires the Android SDK (API 35) and JDK 17:
+Le fichier est du JSON lisible :
 
+```json
+{
+  "format": "repas",
+  "version": 1,
+  "exportedOn": "2026-10-21",
+  "recipes": [
+    { "name": "Curry de lentilles", "url": "https://…", "labels": ["Végétarien"],
+      "ingredients": ["…"], "instructions": ["…"] }
+  ],
+  "dinners": [ { "date": "2026-10-20", "recipe": "Curry de lentilles" } ]
+}
 ```
-./gradlew assembleDebug
-```
 
-Tech: Kotlin, Jetpack Compose (Material 3), Room, Jsoup (recipe import via schema.org JSON-LD), Coil.
+## Installation
+
+Chaque push sur `main` construit un APK avec GitHub Actions et le publie dans les **Releases**.
+Sur le téléphone, téléchargez `app-release.apk` depuis la dernière release et autorisez l'installation.
+
+## Compiler
+
+Android SDK (API 35) et JDK 17 : `./gradlew assembleDebug`
+
+Kotlin, Jetpack Compose (Material 3), Room, Jsoup (import via schema.org JSON-LD), Coil.

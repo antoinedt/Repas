@@ -21,10 +21,21 @@ data class Recipe(
     val servings: String? = null,
     val totalTime: String? = null,
     val createdAt: Long = System.currentTimeMillis(),
+    /** One label per line. */
+    @ColumnInfo(defaultValue = "''") val labels: String = "",
 ) {
+    val labelList: List<String> get() = labels.lines().map { it.trim() }.filter { it.isNotEmpty() }
+
     val ingredientList: List<String> get() = ingredients.lines().filter { it.isNotBlank() }
     val instructionList: List<String> get() = instructions.lines().filter { it.isNotBlank() }
+
+    fun withLabels(list: List<String>): Recipe =
+        copy(labels = list.map { it.trim() }.filter { it.isNotEmpty() }.distinctBy { it.lowercase() }.joinToString("\n"))
 }
+
+/** All labels used across [recipes], sorted. */
+fun allLabels(recipes: List<Recipe>): List<String> =
+    recipes.flatMap { it.labelList }.distinctBy { it.lowercase() }.sortedBy { it.lowercase() }
 
 /** A dinner eaten on a given day. Dates are stored as [java.time.LocalDate.toEpochDay]. */
 @Entity(

@@ -1,5 +1,6 @@
 package com.antoinedt.dinners.ui.calendar
 
+import com.antoinedt.dinners.ui.frDate
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -57,9 +58,9 @@ fun AddDinnerDialog(
     var logIt by rememberSaveable { mutableStateOf(true) }
 
     val title = when {
-        date == null -> "New recipe"
-        initialUrl != null -> "Save shared recipe"
-        else -> "Dinner · " + date.format(DateTimeFormatter.ofPattern("EEE d MMM"))
+        date == null -> "Nouvelle recette"
+        initialUrl != null -> "Enregistrer la recette partagée"
+        else -> "Repas · " + date.format(frDate("EEE d MMM"))
     }
 
     AlertDialog(
@@ -73,7 +74,7 @@ fun AddDinnerDialog(
                         OutlinedTextField(
                             value = query,
                             onValueChange = { query = it; selectedId = null; expanded = true },
-                            label = { Text("What did you eat?") },
+                            label = { Text("Qu'avez-vous mangé ?") },
                             singleLine = true,
                             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded) },
                             modifier = Modifier.menuAnchor(MenuAnchorType.PrimaryEditable).fillMaxWidth(),
@@ -87,7 +88,7 @@ fun AddDinnerDialog(
                                 )
                             }
                             DropdownMenuItem(
-                                text = { Text(if (query.isBlank()) "Add new recipe…" else "Add new “${query.trim()}”…") },
+                                text = { Text(if (query.isBlank()) "Nouvelle recette…" else "Nouvelle recette « ${query.trim()} »…") },
                                 leadingIcon = { Icon(Icons.Default.Add, null) },
                                 onClick = { name = query.trim(); creating = true; expanded = false },
                                 contentPadding = ExposedDropdownMenuDefaults.ItemContentPadding,
@@ -95,34 +96,34 @@ fun AddDinnerDialog(
                         }
                     }
                     if (recipes.isEmpty()) {
-                        Text("No recipes yet — add your first one.", style = MaterialTheme.typography.bodySmall)
+                        Text("Pas encore de recettes — ajoutez la première.", style = MaterialTheme.typography.bodySmall)
                     }
                     TextButton(onClick = { name = query.trim(); creating = true }) {
                         Icon(Icons.Default.Add, null)
-                        Text("Add new recipe")
+                        Text("Nouvelle recette")
                     }
                 } else {
                     OutlinedTextField(
                         value = name,
                         onValueChange = { name = it },
-                        label = { Text(if (url.isBlank()) "Name" else "Name (optional, taken from website)") },
+                        label = { Text(if (url.isBlank()) "Nom" else "Nom (facultatif, repris du site)") },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth(),
                     )
                     OutlinedTextField(
                         value = url,
                         onValueChange = { url = it },
-                        label = { Text("Recipe website (optional)") },
+                        label = { Text("Site de la recette (facultatif)") },
                         placeholder = { Text("https://…") },
                         singleLine = true,
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
-                        supportingText = { Text("The recipe will be downloaded and saved in the app.") },
+                        supportingText = { Text("La recette sera téléchargée et enregistrée dans l'app.") },
                         modifier = Modifier.fillMaxWidth(),
                     )
                     if (date != null && initialUrl != null) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Checkbox(checked = logIt, onCheckedChange = { logIt = it })
-                            Text("Log as tonight's dinner")
+                            Text("Noter comme repas de ce soir")
                         }
                     }
                 }
@@ -133,7 +134,7 @@ fun AddDinnerDialog(
                 TextButton(
                     enabled = !busy && (name.isNotBlank() || url.isNotBlank()),
                     onClick = { onCreate(name, url.ifBlank { null }, date != null && logIt) },
-                ) { Text(if (date != null && (initialUrl == null || logIt)) "Add" else "Save") }
+                ) { Text(if (date != null && (initialUrl == null || logIt)) "Ajouter" else "Enregistrer") }
             } else {
                 TextButton(
                     enabled = selectedId != null || recipes.any { it.name.equals(query.trim(), true) },
@@ -141,13 +142,13 @@ fun AddDinnerDialog(
                         val id = selectedId ?: recipes.first { it.name.equals(query.trim(), true) }.id
                         onPick(id)
                     },
-                ) { Text("Add") }
+                ) { Text("Ajouter") }
             }
         },
         dismissButton = {
             TextButton(onClick = {
                 if (creating && date != null && initialUrl == null) creating = false else onDismiss()
-            }) { Text(if (creating && date != null && initialUrl == null) "Back" else "Cancel") }
+            }) { Text(if (creating && date != null && initialUrl == null) "Retour" else "Annuler") }
         },
     )
 }

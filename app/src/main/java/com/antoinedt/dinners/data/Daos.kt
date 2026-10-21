@@ -12,6 +12,9 @@ interface RecipeDao {
     @Query("SELECT * FROM recipes ORDER BY name COLLATE NOCASE")
     fun observeAll(): Flow<List<Recipe>>
 
+    @Query("SELECT * FROM recipes")
+    suspend fun getAll(): List<Recipe>
+
     @Query("SELECT * FROM recipes WHERE id = :id")
     fun observe(id: Long): Flow<Recipe?>
 
@@ -38,6 +41,9 @@ interface DinnerDao {
         """
     )
     fun observeAll(): Flow<List<DinnerEntry>>
+
+    @Query("SELECT * FROM dinners")
+    suspend fun getAll(): List<Dinner>
 
     @Insert
     suspend fun insert(dinner: Dinner): Long

@@ -1,6 +1,12 @@
 package com.antoinedt.dinners
 
 import android.app.Application
+import android.net.Uri
+import androidx.core.content.FileProvider
+import com.antoinedt.dinners.data.Backup
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import java.io.File
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.antoinedt.dinners.data.AppDatabase
@@ -51,7 +57,7 @@ class DinnersViewModel(app: Application) : AndroidViewModel(app) {
         try {
             val (id, warning) = repo.createRecipe(name, url)
             if (date != null) repo.addDinner(date, id)
-            _message.value = warning ?: if (url.isNullOrBlank()) null else "Recipe saved"
+            _message.value = warning ?: if (url.isNullOrBlank()) null else "Recette enregistrée"
         } finally {
             _busy.value = false
         }
@@ -60,7 +66,7 @@ class DinnersViewModel(app: Application) : AndroidViewModel(app) {
     fun refreshRecipe(recipe: Recipe) = viewModelScope.launch {
         _busy.value = true
         try {
-            _message.value = repo.refreshFromWebsite(recipe) ?: "Recipe updated from website"
+            _message.value = repo.refreshFromWebsite(recipe) ?: "Recette mise à jour depuis le site"
         } finally {
             _busy.value = false
         }
@@ -69,4 +75,51 @@ class DinnersViewModel(app: Application) : AndroidViewModel(app) {
     fun updateRecipe(recipe: Recipe) = viewModelScope.launch { repo.updateRecipe(recipe) }
 
     fun deleteRecipe(recipe: Recipe) = viewModelScope.launch { repo.deleteRecipe(recipe) }
+
+    fun setLabels(recipe: Recipe, labels: List<String>) = viewModelScope.launch {
+        repo.updateRecipe(recipe.withLabels(labels))
+    }
+
+    fun backupFileName() = "repas-sauvegarde-${LocalDate.now()}.json"
+
+    /** Writes the backup to a file the user picked (e.g. Downloads or Drive). */
+    fun exportTo(uri: Uri) = viewModelScope.launch {
+        _message.value = runCatching {
+            val json = repo.backupJson()
+            withContext(Dispatchers.IO) {
+                getApplication<Application>().contentResolver.openOutputStream(uri, "wt")!!.use {
+                    it.write(json.toByteArray())
+                }
+            }
+            "Sauvegarde exportée"
+        }.getOrElse { "Échec de l'export : ${it.message}" }
+    }
+
+    /** Writes the backup to the app cache and returns a shareable content:// URI. */
+    suspend fun backupForSharing(): Uri {
+        val app = getApplication<Application>()
+        val json = repo.backupJson()
+        val file = withContext(Dispatchers.IO) {
+            File(app.cacheDir, "partage").apply { mkdirs() }
+                .resolve(backupFileName())
+                .apply { writeText(json) }
+        }
+        return FileProvider.getUriForFile(app, "${app.packageName}.files", file)
+    }
+
+    /** Merges a backup file into the current data. */
+    fun importFrom(uri: Uri) = viewModelScope.launch {
+        _busy.value = true
+        try {
+            _message.value = runCatching {
+                val text = withContext(Dispatchers.IO) {
+                    getApplication<Application>().contentResolver.openInputStream(uri)!!.use { it.readBytes().decodeToString() }
+                }
+                val (recipesAdded, dinnersAdded) = repo.importBackup(Backup.parse(text))
+                "Import terminé : $recipesAdded recette(s) et $dinnersAdded repas ajoutés"
+            }.getOrElse { "Échec de l'import : ${it.message}" }
+        } finally {
+            _busy.value = false
+        }
+    }
 }
