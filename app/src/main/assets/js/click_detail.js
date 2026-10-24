@@ -1,0 +1,12 @@
+var t = document.querySelector(G);
+if (!t) return 'noGrid';
+var r = t.querySelectorAll('tbody > tr')[__IDX__];
+var a = r && (r.querySelector('a[id$="btnConsulter"]') || r.querySelector('td a'));
+if (!a) return 'noBtn';
+var snap = {};
+arr(document.querySelectorAll('.pagecoba')).forEach(function (p) { snap[p.id] = p.innerText; });
+window.__cndSnap = snap;
+window.__cndRows = t.querySelectorAll('tbody > tr').length;
+window.__cndIdx = __IDX__;
+a.click();
+return 'ok';
