@@ -4,6 +4,9 @@ on:
   push:
   workflow_dispatch: {}
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -28,3 +31,13 @@ jobs:
           name: SuiviCND-apk
           path: app/build/outputs/apk/debug/app-debug.apk
           retention-days: 30
+
+      - name: Publish APK as release
+        run: |
+          cp app/build/outputs/apk/debug/app-debug.apk SuiviCND.apk
+          gh release delete suivi-cnd-latest --yes --cleanup-tag || true
+          gh release create suivi-cnd-latest SuiviCND.apk \
+            --target "$GITHUB_SHA" --title "Suivi CND (Android)" \
+            --notes "Latest build of the Suivi CND app. Install SuiviCND.apk on your phone."
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
