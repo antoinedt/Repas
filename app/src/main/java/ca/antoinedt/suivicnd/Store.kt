@@ -69,6 +69,24 @@ class Store(context: Context) {
             prefs.edit().putStringSet("unread", v.toSet()).apply()
         }
 
+    /** nameKey(teacher) -> subject, from the portal's "Cours" page. */
+    var subjects: Map<String, String>
+        get() = try {
+            val o = JSONObject(prefs.getString("subjects", "{}") ?: "{}")
+            o.keys().asSequence().associateWith { o.getString(it) }
+        } catch (e: Exception) {
+            emptyMap()
+        }
+        set(v) {
+            prefs.edit().putString("subjects", JSONObject(v).toString()).apply()
+        }
+
+    var subjectsAt: Long
+        get() = prefs.getLong("subjectsAt", 0L)
+        set(v) {
+            prefs.edit().putLong("subjectsAt", v).apply()
+        }
+
     fun loadItems(): List<SuiviItem> {
         val raw = prefs.getString("items", null) ?: return emptyList()
         return try {

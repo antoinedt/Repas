@@ -167,6 +167,8 @@ fun WebHost(web: WebView, modifier: Modifier) {
 
 enum class Screen { LIST, SETTINGS }
 
+private const val DAY = 24L * 60 * 60 * 1000
+
 @Composable
 fun App(store: Store, web: WebView) {
     var screen by remember { mutableStateOf(if (store.user.isBlank()) Screen.SETTINGS else Screen.LIST) }
@@ -177,6 +179,7 @@ fun App(store: Store, web: WebView) {
     var status by remember { mutableStateOf<String?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
     var showBrowser by remember { mutableStateOf(store.showBrowser) }
+    var subjects by remember { mutableStateOf(store.subjects) }
     val logs = remember { mutableStateListOf<String>() }
     val scope = rememberCoroutineScope()
 
@@ -201,6 +204,19 @@ fun App(store: Store, web: WebView) {
                 store.saveItems(fresh)
                 lastSync = System.currentTimeMillis()
                 store.lastSync = lastSync
+
+                // Teacher -> subject map, refreshed weekly (daily if someone is unknown).
+                val age = lastSync - store.subjectsAt
+                val missing = fresh.any { PortalScraper.nameKey(it.teacher) !in subjects }
+                if (subjects.isEmpty() || age > 7 * DAY || (missing && age > DAY)) {
+                    val m = scraper.fetchSubjects()
+                    if (m.isNotEmpty()) {
+                        subjects = m
+                        store.subjects = m
+                        store.subjectsAt = lastSync
+                    }
+                }
+
                 status = when {
                     known.isEmpty() -> "${fresh.size} suivis importés"
                     newKeys.isEmpty() -> "Aucun nouveau suivi"
@@ -220,6 +236,7 @@ fun App(store: Store, web: WebView) {
         when (screen) {
             Screen.LIST -> ListScreen(
                 all = items,
+                subjects = subjects,
                 unread = unread,
                 lastSync = lastSync,
                 syncing = syncing,
@@ -272,6 +289,7 @@ private sealed class Entry {
 @Composable
 fun ListScreen(
     all: List<SuiviItem>,
+    subjects: Map<String, String>,
     unread: Set<String>,
     lastSync: Long,
     syncing: Boolean,
@@ -448,6 +466,7 @@ fun ListScreen(
                             val key = e.item.key
                             SuiviCard(
                                 item = e.item,
+                                subject = subjects[PortalScraper.nameKey(e.item.teacher)],
                                 isNew = key in unread,
                                 expanded = key in expanded,
                                 onToggle = {
@@ -464,7 +483,13 @@ fun ListScreen(
 }
 
 @Composable
-fun SuiviCard(item: SuiviItem, isNew: Boolean, expanded: Boolean, onToggle: () -> Unit) {
+fun SuiviCard(
+    item: SuiviItem,
+    subject: String?,
+    isNew: Boolean,
+    expanded: Boolean,
+    onToggle: () -> Unit,
+) {
     val cat = catOf(item.type)
     val rotation by animateFloatAsState(if (expanded) 180f else 0f, label = "chevron")
 
@@ -506,9 +531,11 @@ fun SuiviCard(item: SuiviItem, isNew: Boolean, expanded: Boolean, onToggle: () -
                             }
                             Spacer(Modifier.width(8.dp))
                             Text(
-                                prettyDate(item.date),
+                                prettyDate(item.date) + (subject?.let { " · $it" } ?: ""),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
                             )
                         }
                     }
@@ -527,7 +554,10 @@ fun SuiviCard(item: SuiviItem, isNew: Boolean, expanded: Boolean, onToggle: () -
 
                 if (expanded) {
                     HorizontalDivider(Modifier.padding(vertical = 10.dp))
-                    Detail("Enseignant", prettyName(item.teacher))
+                    Detail(
+                        "Enseignant",
+                        prettyName(item.teacher) + (subject?.let { " · $it" } ?: ""),
+                    )
                     if (item.group.isNotBlank()) Detail("Regroupement", item.group)
                     Spacer(Modifier.height(8.dp))
                     Text(

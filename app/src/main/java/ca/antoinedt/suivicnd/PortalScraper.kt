@@ -237,6 +237,65 @@ class PortalScraper(
         return clean(found.substring(2)).ifBlank { null }
     }
 
+    /**
+     * Opens "Cours", selects each course in turn and records who teaches it.
+     * Returns nameKey(teacher) -> subject(s). Best effort: never throws.
+     */
+    suspend fun fetchSubjects(): Map<String, String> {
+        try {
+            log("Lecture des cours…")
+            js("var a = document.querySelector('#lnkCOURS'); if (a) { a.click(); return 'ok'; } return 'no';")
+            if (!waitFor("""!!document.querySelector('select[id$="cboCours"]')""", 20_000)) {
+                log("Page « Cours » introuvable.")
+                return emptyMap()
+            }
+            delay(800)
+            val opts = JSONArray(js(script("courses_list")).ifBlank { "[]" })
+            val byTeacher = mutableMapOf<String, MutableList<String>>()
+            for (i in 0 until opts.length()) {
+                val o = opts.getJSONObject(i)
+                val value = o.getString("v")
+                val label = o.getString("t")
+                val q = JSONObject.quote(value)
+                if (!o.optBoolean("sel")) {
+                    if (js(script("course_select").replace("__VAL__", q)) != "ok") continue
+                }
+                var names = ""
+                val end = System.currentTimeMillis() + 8_000
+                while (System.currentTimeMillis() < end) {
+                    delay(400)
+                    val r = js(script("teachers_read").replace("__VAL__", q))
+                    if (r.isNotEmpty() && !r.startsWith("ERR")) {
+                        names = r
+                        break
+                    }
+                }
+                if (names.isEmpty()) {
+                    log("Cours « $label » : enseignant non lu.")
+                    continue
+                }
+                val a = JSONArray(names)
+                for (k in 0 until a.length()) {
+                    val n = a.getString(k).removePrefix("~")
+                    byTeacher.getOrPut(nameKey(n)) { mutableListOf() }.add(label)
+                }
+            }
+            log("${byTeacher.size} enseignants associés à leurs cours.")
+            return byTeacher.mapValues { (_, labels) -> subjectText(labels) }
+        } catch (e: Exception) {
+            log("Cours : ${e.message}")
+            return emptyMap()
+        }
+    }
+
+    private fun subjectText(labels: List<String>): String {
+        // "MAT306 - Mathématique" -> "Mathématique"; prefer real subjects over
+        // study hall, lunch, homeroom-type entries when someone has both.
+        val minor = Regex("^(DINER|ETU|ORI|SANTE|VIE)", RegexOption.IGNORE_CASE)
+        val main = labels.filterNot { minor.containsMatchIn(it) }.ifEmpty { labels }
+        return main.map { it.substringAfter(" - ", it).trim() }.distinct().joinToString(", ")
+    }
+
     private suspend fun ensureGrid(): Boolean {
         if (waitFor("vis(document.querySelector(G))", 3_000)) return true
         log("Retour à la liste…")
@@ -267,5 +326,10 @@ class PortalScraper(
 
     companion object {
         fun keyOf(date: String, type: String, teacher: String) = "$date|$type|$teacher"
+
+        /** "La Roche, Stéphane" and "Stéphane La Roche" give the same key. */
+        fun nameKey(name: String): String =
+            name.replace(",", " ").lowercase().split(Regex("\\s+"))
+                .filter { it.isNotBlank() }.sorted().joinToString(" ")
     }
 }
