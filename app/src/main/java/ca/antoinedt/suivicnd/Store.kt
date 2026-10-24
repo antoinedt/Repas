@@ -15,6 +15,19 @@ data class SuiviItem(
     val detail: String?,
 )
 
+data class Travail(
+    val code: String,
+    val course: String,
+    val comp: String,
+    val cat: String,
+    val title: String,
+    val assigned: String,
+    val due: String,
+    val result: String,
+) {
+    val key: String get() = "$code|$title|$assigned"
+}
+
 /** Credentials are kept in encrypted prefs; everything else in plain prefs. */
 class Store(context: Context) {
 
@@ -86,6 +99,58 @@ class Store(context: Context) {
         set(v) {
             prefs.edit().putLong("subjectsAt", v).apply()
         }
+
+    var etape: String
+        get() = prefs.getString("etape", "") ?: ""
+        set(v) {
+            prefs.edit().putString("etape", v).apply()
+        }
+
+    var travauxUnread: Set<String>
+        get() = prefs.getStringSet("travauxUnread", emptySet())?.toSet() ?: emptySet()
+        set(v) {
+            prefs.edit().putStringSet("travauxUnread", v.toSet()).apply()
+        }
+
+    fun loadTravaux(): List<Travail> {
+        val raw = prefs.getString("travaux", null) ?: return emptyList()
+        return try {
+            val a = JSONArray(raw)
+            (0 until a.length()).map { i ->
+                val o = a.getJSONObject(i)
+                Travail(
+                    code = o.optString("code"),
+                    course = o.optString("course"),
+                    comp = o.optString("comp"),
+                    cat = o.optString("cat"),
+                    title = o.optString("title"),
+                    assigned = o.optString("assigned"),
+                    due = o.optString("due"),
+                    result = o.optString("result"),
+                )
+            }
+        } catch (e: Exception) {
+            emptyList()
+        }
+    }
+
+    fun saveTravaux(list: List<Travail>) {
+        val a = JSONArray()
+        list.forEach {
+            a.put(
+                JSONObject()
+                    .put("code", it.code)
+                    .put("course", it.course)
+                    .put("comp", it.comp)
+                    .put("cat", it.cat)
+                    .put("title", it.title)
+                    .put("assigned", it.assigned)
+                    .put("due", it.due)
+                    .put("result", it.result)
+            )
+        }
+        prefs.edit().putString("travaux", a.toString()).apply()
+    }
 
     fun loadItems(): List<SuiviItem> {
         val raw = prefs.getString("items", null) ?: return emptyList()

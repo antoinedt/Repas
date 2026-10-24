@@ -35,10 +35,15 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Badge
+import androidx.compose.material3.BadgedBox
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -167,6 +172,8 @@ fun WebHost(web: WebView, modifier: Modifier) {
 
 enum class Screen { LIST, SETTINGS }
 
+enum class Tab { SUIVI, TRAVAUX }
+
 private const val DAY = 24L * 60 * 60 * 1000
 
 @Composable
@@ -180,6 +187,10 @@ fun App(store: Store, web: WebView) {
     var error by remember { mutableStateOf<String?>(null) }
     var showBrowser by remember { mutableStateOf(store.showBrowser) }
     var subjects by remember { mutableStateOf(store.subjects) }
+    var travaux by remember { mutableStateOf(store.loadTravaux()) }
+    var travauxUnread by remember { mutableStateOf(store.travauxUnread) }
+    var etape by remember { mutableStateOf(store.etape) }
+    var tab by remember { mutableStateOf(Tab.SUIVI) }
     val logs = remember { mutableStateListOf<String>() }
     val scope = rememberCoroutineScope()
 
@@ -205,6 +216,30 @@ fun App(store: Store, web: WebView) {
                 lastSync = System.currentTimeMillis()
                 store.lastSync = lastSync
 
+                // Travaux: flag new assignments and newly published results.
+                var travauxNews = 0
+                val tr = scraper.fetchTravaux()
+                if (tr != null) {
+                    val (et, list) = tr
+                    val old = travaux.associateBy { it.key }
+                    val news = list.filter { t ->
+                        val before = old[t.key]
+                        before == null || (before.result.isBlank() && t.result.isNotBlank())
+                    }.map { it.key }.toSet()
+                    if (old.isNotEmpty()) {
+                        travauxNews = news.size
+                        travauxUnread = (travauxUnread + news) intersect list.map { it.key }.toSet()
+                    }
+                    // A new étape starts empty: keep the old list until something shows up.
+                    if (list.isNotEmpty() || et == etape) {
+                        travaux = list
+                        etape = et
+                        store.saveTravaux(list)
+                        store.etape = et
+                        store.travauxUnread = travauxUnread
+                    }
+                }
+
                 // Teacher -> subject map, refreshed weekly (daily if someone is unknown).
                 val age = lastSync - store.subjectsAt
                 val missing = fresh.any { PortalScraper.nameKey(it.teacher) !in subjects }
@@ -217,12 +252,19 @@ fun App(store: Store, web: WebView) {
                     }
                 }
 
-                status = when {
+                val suiviMsg = when {
                     known.isEmpty() -> "${fresh.size} suivis importés"
                     newKeys.isEmpty() -> "Aucun nouveau suivi"
                     newKeys.size == 1 -> "1 nouveau suivi"
                     else -> "${newKeys.size} nouveaux suivis"
                 }
+                val travauxMsg = when {
+                    tr == null -> "travaux non lus (voir le journal)"
+                    travauxNews == 0 -> null
+                    travauxNews == 1 -> "1 nouveauté dans les travaux"
+                    else -> "$travauxNews nouveautés dans les travaux"
+                }
+                status = listOfNotNull(suiviMsg, travauxMsg).joinToString(" · ")
             } catch (e: Exception) {
                 error = e.message ?: e.toString()
                 status = null
@@ -238,6 +280,17 @@ fun App(store: Store, web: WebView) {
                 all = items,
                 subjects = subjects,
                 unread = unread,
+                tab = tab,
+                onTab = { tab = it },
+                travaux = travaux,
+                travauxUnread = travauxUnread,
+                etape = etape,
+                onTravailOpened = { key ->
+                    if (key in travauxUnread) {
+                        travauxUnread = travauxUnread - key
+                        store.travauxUnread = travauxUnread
+                    }
+                },
                 lastSync = lastSync,
                 syncing = syncing,
                 status = status,
@@ -263,6 +316,12 @@ fun App(store: Store, web: WebView) {
                     screen = Screen.LIST
                 },
                 onClearItems = {
+                    travaux = emptyList()
+                    travauxUnread = emptySet()
+                    etape = ""
+                    store.saveTravaux(emptyList())
+                    store.travauxUnread = emptySet()
+                    store.etape = ""
                     items = emptyList()
                     unread = emptySet()
                     lastSync = 0L
@@ -291,6 +350,12 @@ fun ListScreen(
     all: List<SuiviItem>,
     subjects: Map<String, String>,
     unread: Set<String>,
+    tab: Tab,
+    onTab: (Tab) -> Unit,
+    travaux: List<Travail>,
+    travauxUnread: Set<String>,
+    etape: String,
+    onTravailOpened: (String) -> Unit,
     lastSync: Long,
     syncing: Boolean,
     status: String?,
@@ -305,13 +370,15 @@ fun ListScreen(
     var filter by remember { mutableStateOf<Cat?>(null) }
     var expanded by remember { mutableStateOf(setOf<String>()) }
     var showLog by remember { mutableStateOf(false) }
+    var tView by remember { mutableStateOf(TView.UPCOMING) }
+    var tExpanded by remember { mutableStateOf(setOf<String>()) }
 
     Scaffold(
         topBar = {
             TopAppBar(
                 title = {
                     Column {
-                        Text("Suivi de l'élève")
+                        Text(if (tab == Tab.SUIVI) "Suivi de l'élève" else "Travaux")
                         if (lastSync > 0) {
                             Text(
                                 "Synchro : " + stamp(lastSync),
@@ -327,6 +394,30 @@ fun ListScreen(
                     }
                 },
             )
+        },
+        bottomBar = {
+            NavigationBar {
+                NavigationBarItem(
+                    selected = tab == Tab.SUIVI,
+                    onClick = { onTab(Tab.SUIVI) },
+                    icon = {
+                        BadgedBox(badge = { if (unread.isNotEmpty()) Badge { Text("${unread.size}") } }) {
+                            Icon(Icons.Filled.Notifications, contentDescription = null)
+                        }
+                    },
+                    label = { Text("Suivi") },
+                )
+                NavigationBarItem(
+                    selected = tab == Tab.TRAVAUX,
+                    onClick = { onTab(Tab.TRAVAUX) },
+                    icon = {
+                        BadgedBox(badge = { if (travauxUnread.isNotEmpty()) Badge { Text("${travauxUnread.size}") } }) {
+                            Icon(Icons.Filled.DateRange, contentDescription = null)
+                        }
+                    },
+                    label = { Text("Travaux") },
+                )
+            }
         },
         floatingActionButton = {
             ExtendedFloatingActionButton(
@@ -411,7 +502,26 @@ fun ListScreen(
                     }
                 }
 
-                if (all.isNotEmpty()) {
+                if (tab == Tab.TRAVAUX) {
+                    travauxSection(
+                        all = travaux,
+                        unread = travauxUnread,
+                        etape = etape,
+                        view = tView,
+                        onView = { tView = it },
+                        expanded = tExpanded,
+                        onToggle = { k ->
+                            tExpanded = if (k in tExpanded) tExpanded - k else tExpanded + k
+                            if (k.startsWith("c:")) {
+                                travaux.filter { it.code == k.removePrefix("c:") }
+                                    .forEach { onTravailOpened(it.key) }
+                            } else {
+                                onTravailOpened(k.substringAfter(":"))
+                            }
+                        },
+                        syncing = syncing,
+                    )
+                } else if (all.isNotEmpty()) {
                     item(key = "filters") {
                         Row(
                             Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
@@ -445,7 +555,7 @@ fun ListScreen(
                     }
                 }
 
-                items(
+                if (tab == Tab.SUIVI) items(
                     entries,
                     key = { e ->
                         when (e) {

@@ -238,14 +238,84 @@ class PortalScraper(
     }
 
     /**
+     * Opens "Travaux" (all courses, current étape) and reads every assignment.
+     * Returns (étape, list) or null if the page couldn't be read. Never throws.
+     */
+    suspend fun fetchTravaux(): Pair<String, List<Travail>>? {
+        try {
+            log("Lecture des travaux…")
+            // Mark the current page so we can tell when the new one has replaced it.
+            js("arr(document.querySelectorAll('.pagecoba')).forEach(function (p) { p.__cndOld = true; }); return 'ok';")
+            js("var a = document.querySelector('#lnkTRAVAUX'); if (a) { a.click(); return 'ok'; } return 'no';")
+            val loaded = waitFor(
+                """arr(document.querySelectorAll('select[id$="cboEtape"]')).some(function (s) {
+                    var p = s.closest('.pagecoba'); return !p || !p.__cndOld; })""",
+                20_000,
+            )
+            if (!loaded) {
+                log("Page « Travaux » introuvable.")
+                return null
+            }
+            delay(800)
+            if (js(script("travaux_all")) == "changed") {
+                waitFor(
+                    """arr(document.querySelectorAll('table[id*="grdTravaux"]')).some(function (t) { return !t.__cndOld; })""",
+                    15_000,
+                )
+                delay(800)
+            }
+            val raw = js(script("travaux_read"))
+            if (raw.startsWith("ERR")) {
+                log("Travaux : $raw")
+                return null
+            }
+            val o = JSONObject(raw)
+            val list = mutableListOf<Travail>()
+            val courses = o.getJSONArray("courses")
+            for (i in 0 until courses.length()) {
+                val c = courses.getJSONObject(i)
+                val code = c.optString("code")
+                val course = c.optString("title").substringAfter(" - ").ifBlank { code }
+                val items = c.getJSONArray("items")
+                for (k in 0 until items.length()) {
+                    val t = items.getJSONObject(k)
+                    list += Travail(
+                        code = code,
+                        course = course,
+                        comp = t.optString("comp"),
+                        cat = t.optString("cat"),
+                        title = t.optString("title"),
+                        assigned = t.optString("assigned"),
+                        due = t.optString("due"),
+                        result = t.optString("result"),
+                    )
+                }
+            }
+            log("${list.size} travaux trouvés.")
+            return o.optString("etape") to list.distinctBy { it.key }
+        } catch (e: Exception) {
+            log("Travaux : ${e.message}")
+            return null
+        }
+    }
+
+    /**
      * Opens "Cours", selects each course in turn and records who teaches it.
      * Returns nameKey(teacher) -> subject(s). Best effort: never throws.
      */
     suspend fun fetchSubjects(): Map<String, String> {
         try {
             log("Lecture des cours…")
+            // The Travaux page also has a course dropdown: wait for the *new* Cours page.
+            js("arr(document.querySelectorAll('.pagecoba')).forEach(function (p) { p.__cndOld = true; }); return 'ok';")
             js("var a = document.querySelector('#lnkCOURS'); if (a) { a.click(); return 'ok'; } return 'no';")
-            if (!waitFor("""!!document.querySelector('select[id$="cboCours"]')""", 20_000)) {
+            val loaded = waitFor(
+                """!!document.querySelector('.pageonglet[data-id="ongletAccueil"]') &&
+                    arr(document.querySelectorAll('select[id$="cboCours"]')).some(function (s) {
+                        var p = s.closest('.pagecoba'); return !p || !p.__cndOld; })""",
+                20_000,
+            )
+            if (!loaded) {
                 log("Page « Cours » introuvable.")
                 return emptyMap()
             }
