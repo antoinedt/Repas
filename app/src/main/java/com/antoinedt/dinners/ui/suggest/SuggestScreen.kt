@@ -58,6 +58,7 @@ fun SuggestScreen(vm: DinnersViewModel) {
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Text("On mange quoi ?", style = MaterialTheme.typography.headlineSmall)
+        ClaudeIdeaCard(vm)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
             FilterChip(selected = !tomorrow, onClick = { tomorrow = false }, label = { Text("Ce soir") })
             FilterChip(selected = tomorrow, onClick = { tomorrow = true }, label = { Text("Demain") })

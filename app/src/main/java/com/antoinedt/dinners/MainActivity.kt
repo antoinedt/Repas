@@ -28,7 +28,17 @@ class MainActivity : ComponentActivity() {
         handleShare(intent)
     }
 
+    override fun onResume() {
+        super.onResume()
+        viewModel.reloadIdea()
+    }
+
     private fun handleShare(intent: Intent?) {
+        if (intent?.getBooleanExtra(EXTRA_OPEN_IDEAS, false) == true) viewModel.requestOpenIdeas()
         if (intent?.action == Intent.ACTION_SEND) viewModel.onShared(intent.getStringExtra(Intent.EXTRA_TEXT))
+    }
+
+    companion object {
+        const val EXTRA_OPEN_IDEAS = "open_ideas"
     }
 }

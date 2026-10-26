@@ -3,7 +3,14 @@ package com.antoinedt.dinners
 import android.app.Application
 import android.net.Uri
 import androidx.core.content.FileProvider
+import androidx.documentfile.provider.DocumentFile
 import com.antoinedt.dinners.data.Backup
+import com.antoinedt.dinners.data.ClaudeIdeas
+import com.antoinedt.dinners.data.DinnerIdea
+import kotlinx.coroutines.FlowPreview
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.debounce
+import android.content.Intent
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -21,8 +28,10 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.time.LocalDate
 
+@OptIn(FlowPreview::class)
 class DinnersViewModel(app: Application) : AndroidViewModel(app) {
     private val repo = Repository(AppDatabase.get(app))
+    private val store = IdeaStore(app)
 
     val recipes: StateFlow<List<Recipe>> =
         repo.recipes.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
@@ -121,5 +130,136 @@ class DinnersViewModel(app: Application) : AndroidViewModel(app) {
         } finally {
             _busy.value = false
         }
+    }
+
+    // ---- Automatic backup to a folder chosen by the user ----
+
+    private val _autoBackupFolder = MutableStateFlow(store.autoBackupFolder)
+    val autoBackupFolder = _autoBackupFolder.asStateFlow()
+
+    init {
+        // Rewrite the backup file a couple of seconds after any change.
+        viewModelScope.launch {
+            combine(repo.recipes, repo.dinners) { _, _ -> }.debounce(2_000).collect {
+                _autoBackupFolder.value?.let { folder -> runCatching { writeAutoBackup(Uri.parse(folder)) } }
+            }
+        }
+    }
+
+    fun setAutoBackupFolder(uri: Uri) = viewModelScope.launch {
+        val app = getApplication<Application>()
+        runCatching {
+            app.contentResolver.takePersistableUriPermission(
+                uri, Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION,
+            )
+            writeAutoBackup(uri)
+        }.onSuccess {
+            store.autoBackupFolder = uri.toString()
+            _autoBackupFolder.value = uri.toString()
+            _message.value = "Sauvegarde automatique activée : $AUTO_BACKUP_FILE"
+        }.onFailure { _message.value = "Impossible d'écrire dans ce dossier : ${it.message}" }
+    }
+
+    fun disableAutoBackup() {
+        val app = getApplication<Application>()
+        _autoBackupFolder.value?.let { folder ->
+            runCatching {
+                app.contentResolver.releasePersistableUriPermission(
+                    Uri.parse(folder), Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION,
+                )
+            }
+        }
+        store.autoBackupFolder = null
+        _autoBackupFolder.value = null
+        _message.value = "Sauvegarde automatique désactivée"
+    }
+
+    private suspend fun writeAutoBackup(folder: Uri) {
+        val app = getApplication<Application>()
+        val json = repo.backupJson()
+        withContext(Dispatchers.IO) {
+            val dir = DocumentFile.fromTreeUri(app, folder) ?: error("dossier introuvable")
+            val file = dir.findFile(AUTO_BACKUP_FILE)
+                ?: dir.createFile("application/json", AUTO_BACKUP_FILE.removeSuffix(".json"))
+                ?: error("impossible de créer le fichier")
+            app.contentResolver.openOutputStream(file.uri, "wt")!!.use { it.write(json.toByteArray()) }
+        }
+    }
+
+    // ---- Claude idea of the day ----
+
+    private val _hasApiKey = MutableStateFlow(store.apiKey != null)
+    val hasApiKey = _hasApiKey.asStateFlow()
+
+    private val _dailyIdea = MutableStateFlow(store.dailyIdea)
+    val dailyIdea = _dailyIdea.asStateFlow()
+
+    private val _idea = MutableStateFlow(store.lastIdea)
+    val idea = _idea.asStateFlow()
+
+    private val _ideaLoading = MutableStateFlow(false)
+    val ideaLoading = _ideaLoading.asStateFlow()
+
+    private val _ideaError = MutableStateFlow<String?>(null)
+    val ideaError = _ideaError.asStateFlow()
+
+    /** Set when a notification asks to open the Idées tab. */
+    private val _openIdeas = MutableStateFlow(false)
+    val openIdeas = _openIdeas.asStateFlow()
+    fun requestOpenIdeas() { _openIdeas.value = true }
+    fun openIdeasHandled() { _openIdeas.value = false }
+
+    /** Re-reads the idea the background job may have saved. */
+    fun reloadIdea() { _idea.value = store.lastIdea }
+
+    fun saveApiKey(key: String) {
+        store.apiKey = key
+        _hasApiKey.value = store.apiKey != null
+    }
+
+    fun forgetApiKey() {
+        store.apiKey = null
+        _hasApiKey.value = false
+        setDailyIdea(false)
+    }
+
+    fun setDailyIdea(enabled: Boolean) {
+        store.dailyIdea = enabled
+        _dailyIdea.value = enabled
+        val app = getApplication<Application>()
+        if (enabled) DailyIdeaWorker.schedule(app) else DailyIdeaWorker.cancel(app)
+    }
+
+    fun askClaude() = viewModelScope.launch {
+        val key = store.apiKey ?: return@launch
+        _ideaLoading.value = true
+        _ideaError.value = null
+        try {
+            val (recipes, dinners) = repo.snapshot()
+            val idea = ClaudeIdeas.fetch(key, recipes, dinners, LocalDate.now())
+            store.lastIdea = idea
+            _idea.value = idea
+        } catch (e: Exception) {
+            _ideaError.value = "Échec de la demande à Claude : ${e.message}"
+        } finally {
+            _ideaLoading.value = false
+        }
+    }
+
+    /** Saves the idea as a recipe (importing its web page) and optionally logs it for today. */
+    fun saveIdea(idea: DinnerIdea, tonight: Boolean) = viewModelScope.launch {
+        _busy.value = true
+        try {
+            val (id, warning) = repo.createRecipe(idea.name, idea.url)
+            repo.addLabels(id, idea.labels)
+            if (tonight) repo.addDinner(LocalDate.now(), id)
+            _message.value = warning ?: if (tonight) "Ajouté au repas de ce soir" else "Recette enregistrée"
+        } finally {
+            _busy.value = false
+        }
+    }
+
+    companion object {
+        const val AUTO_BACKUP_FILE = "repas-sauvegarde.json"
     }
 }

@@ -29,11 +29,14 @@ import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.Sync
+import androidx.compose.material.icons.filled.SyncDisabled
 import androidx.compose.material3.Card
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
@@ -81,6 +84,10 @@ fun RecipesScreen(vm: DinnersViewModel, onOpen: (Long) -> Unit) {
     val importLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         uri?.let(vm::importFrom)
     }
+    val folderLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
+        uri?.let(vm::setAutoBackupFolder)
+    }
+    val autoBackupFolder by vm.autoBackupFolder.collectAsStateWithLifecycle()
 
     val labels = allLabels(recipes)
     val activeLabel = labelFilter?.takeIf { it in labels }
@@ -144,6 +151,24 @@ fun RecipesScreen(vm: DinnersViewModel, onOpen: (Long) -> Unit) {
                             leadingIcon = { Icon(Icons.Default.FileUpload, null) },
                             onClick = { menu = false; importLauncher.launch(arrayOf("application/json", "text/plain", "application/octet-stream")) },
                         )
+                        HorizontalDivider()
+                        DropdownMenuItem(
+                            text = {
+                                Text(
+                                    if (autoBackupFolder == null) "Sauvegarde automatique…"
+                                    else "Sauvegarde automatique : changer de dossier…"
+                                )
+                            },
+                            leadingIcon = { Icon(Icons.Default.Sync, null) },
+                            onClick = { menu = false; folderLauncher.launch(null) },
+                        )
+                        if (autoBackupFolder != null) {
+                            DropdownMenuItem(
+                                text = { Text("Désactiver la sauvegarde automatique") },
+                                leadingIcon = { Icon(Icons.Default.SyncDisabled, null) },
+                                onClick = { menu = false; vm.disableAutoBackup() },
+                            )
+                        }
                     }
                 }
             }

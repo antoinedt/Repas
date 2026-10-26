@@ -51,18 +51,27 @@ class Repository(private val db: AppDatabase) {
         )
     }
 
+    suspend fun addLabels(recipeId: Long, labels: List<String>) {
+        if (labels.isEmpty()) return
+        val recipe = db.recipeDao().getAll().firstOrNull { it.id == recipeId } ?: return
+        db.recipeDao().update(recipe.withLabels(recipe.labelList + labels))
+    }
+
     suspend fun updateRecipe(recipe: Recipe) = db.recipeDao().update(recipe)
     suspend fun deleteRecipe(recipe: Recipe) = db.recipeDao().delete(recipe)
 
-    /** Full backup read straight from the database. */
-    suspend fun backupJson(): String {
+    /** Current recipes and dinners read straight from the database. */
+    suspend fun snapshot(): Pair<List<Recipe>, List<DinnerEntry>> {
         val recipes = db.recipeDao().getAll().sortedBy { it.name.lowercase() }
         val names = recipes.associate { it.id to it.name }
         val dinners = db.dinnerDao().getAll().mapNotNull { d ->
             names[d.recipeId]?.let { DinnerEntry(d.id, d.epochDay, d.recipeId, it) }
         }
-        return Backup.toJson(recipes, dinners)
+        return recipes to dinners
     }
+
+    /** Full backup read straight from the database. */
+    suspend fun backupJson(): String = snapshot().let { (recipes, dinners) -> Backup.toJson(recipes, dinners) }
 
     /**
      * Merges a backup into the database: recipes are matched by name (missing labels and details

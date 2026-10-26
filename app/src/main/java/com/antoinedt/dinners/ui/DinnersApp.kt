@@ -61,6 +61,14 @@ fun DinnersApp(vm: DinnersViewModel) {
         }
     }
 
+    val openIdeas by vm.openIdeas.collectAsStateWithLifecycle()
+    LaunchedEffect(openIdeas) {
+        if (openIdeas) {
+            nav.navigate("suggest") { launchSingleTop = true }
+            vm.openIdeasHandled()
+        }
+    }
+
     val backStack by nav.currentBackStackEntryAsState()
     val current = backStack?.destination?.route
 
