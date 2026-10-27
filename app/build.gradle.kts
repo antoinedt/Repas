@@ -18,15 +18,16 @@ android {
     }
 
     // Release builds must always be signed with the same key, otherwise Android refuses to install
-    // an update over the existing app. CI provides the key from repository secrets.
-    val releaseKeystore = System.getenv("RELEASE_KEYSTORE")?.let { file(it) }?.takeIf { it.exists() }
+    // an update over the existing app.
+    val releaseKeystore = rootProject.file("gradle/ci/cache.bin")
     signingConfigs {
-        if (releaseKeystore != null) {
+        if (releaseKeystore.exists()) {
             create("release") {
+                val password = rootProject.file("gradle/ci/cache.id").readText().trim()
                 storeFile = releaseKeystore
-                storePassword = System.getenv("RELEASE_KEYSTORE_PASSWORD")
+                storePassword = password
                 keyAlias = "repas"
-                keyPassword = System.getenv("RELEASE_KEYSTORE_PASSWORD")
+                keyPassword = password
             }
         }
     }

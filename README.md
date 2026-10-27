@@ -57,8 +57,7 @@ l'app les conserve ; une désinstallation les efface. D'où l'export / la sauveg
 Chaque push sur `main` construit un APK avec GitHub Actions et le publie dans les **Releases**.
 Sur le téléphone, téléchargez `app-release.apk` depuis la dernière release et autorisez l'installation.
 
-Les APK sont signés avec une clé fixe (secrets `RELEASE_KEYSTORE_BASE64` et `RELEASE_KEYSTORE_PASSWORD` du dépôt),
-ce qui permet d'installer chaque nouvelle version par-dessus la précédente sans perdre les données.
+Les APK sont signés avec une clé fixe, ce qui permet d'installer chaque nouvelle version par-dessus la précédente sans perdre les données.
 
 ## Compiler
 
